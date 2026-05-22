@@ -116,10 +116,12 @@ class AttendanceRepository(private val studentDao: StudentDao) {
 
     private val subjectTemplatesByDept = mapOf(
         "Mechanical" to listOf(
-            Pair("Engineering Mechanics", "MEMEC101"),
-            Pair("Thermodynamics", "MEMEC102"),
-            Pair("Material Science", "MEMEC103"),
-            Pair("Workshop Technology", "MEMEC104"),
+            listOf(
+                Pair("Engineering Mechanics", "MEMEC101"),
+                Pair("Thermodynamics", "MEMEC102"),
+                Pair("Material Science", "MEMEC103"),
+                Pair("Workshop Technology", "MEMEC104")
+            ),
             listOf(
                 Pair("Kinematics & Dynamics of Machinery", "MEMEC204"),
                 Pair("Fluid Mechanics & Hydraulic Machines", "MEMEC205"),
@@ -144,9 +146,11 @@ class AttendanceRepository(private val studentDao: StudentDao) {
             )
         ),
         "Computer" to listOf(
-            Pair("Programming Fundamentals", "COEC101"),
-            Pair("Discrete Mathematics", "COEC102"),
-            Pair("Digital Logic Design", "COEC103"),
+            listOf(
+                Pair("Programming Fundamentals", "COEC101"),
+                Pair("Discrete Mathematics", "COEC102"),
+                Pair("Digital Logic Design", "COEC103")
+            ),
             listOf(
                 Pair("Operating Systems", "COEC204"),
                 Pair("Database Management Systems", "COEC206"),
@@ -170,9 +174,11 @@ class AttendanceRepository(private val studentDao: StudentDao) {
             )
         ),
         "ECE" to listOf(
-            Pair("Basic Electronics", "ECEC101"),
-            Pair("Network Analysis", "ECEC102"),
-            Pair("Signals & Systems", "ECEC103"),
+            listOf(
+                Pair("Basic Electronics", "ECEC101"),
+                Pair("Network Analysis", "ECEC102"),
+                Pair("Signals & Systems", "ECEC103")
+            ),
             listOf(
                 Pair("Analog Electronics - II", "ECEC204"),
                 Pair("Microprocessors & Microcontrollers", "ECEC206"),
