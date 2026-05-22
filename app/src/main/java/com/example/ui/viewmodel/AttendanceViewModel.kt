@@ -8,8 +8,10 @@ import android.graphics.Color as AndroidColor
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
+import com.example.data.model.AttendanceFilterStatus
 import com.example.data.model.AttendanceInsights
 import com.example.data.model.ChatMessage
+import com.example.data.model.DashboardFilters
 import com.example.data.model.Sender
 import com.example.data.model.StudentProfile
 import com.example.data.model.SubjectAttendance
@@ -37,11 +39,9 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     private val database = AppDatabase.getDatabase(application)
     private val repository = AttendanceRepository(database.studentDao())
 
-    // UI screen navigation state
     private val _screenState = MutableStateFlow<ScreenState>(ScreenState.Login)
     val screenState: StateFlow<ScreenState> = _screenState.asStateFlow()
 
-    // Profile & Attendance loaded states
     private val _currentRollNo = MutableStateFlow<String>("")
     val currentRollNo: StateFlow<String> = _currentRollNo.asStateFlow()
 
@@ -57,9 +57,38 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val attendanceInsights: StateFlow<AttendanceInsights> = subjectAttendanceList
+    // Filter state
+    private val _filters = MutableStateFlow(DashboardFilters())
+    val filters: StateFlow<DashboardFilters> = _filters.asStateFlow()
+
+    private val _availableSemesters = MutableStateFlow<List<String>>(emptyList())
+    val availableSemesters: StateFlow<List<String>> = _availableSemesters.asStateFlow()
+
+    val filteredSubjects: StateFlow<List<SubjectAttendance>> = combine(
+        subjectAttendanceList, _filters
+    ) { subjects, filter ->
+        repository.filterSubjects(subjects, filter)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val attendanceInsights: StateFlow<AttendanceInsights> = filteredSubjects
         .map { repository.computeInsights(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AttendanceInsights(0.0, 0, 0, 0, 0))
+
+    fun updateFilterSemester(semester: String) {
+        _filters.value = _filters.value.copy(semester = semester)
+    }
+
+    fun updateFilterStatus(status: AttendanceFilterStatus) {
+        _filters.value = _filters.value.copy(status = status)
+    }
+
+    fun updateFilterSearch(query: String) {
+        _filters.value = _filters.value.copy(searchQuery = query)
+    }
+
+    fun resetFilters() {
+        _filters.value = DashboardFilters()
+    }
 
     // CAPTCHA properties
     private val _captchaText = MutableStateFlow("")
@@ -74,7 +103,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     private val _captchaError = MutableStateFlow<String?>(null)
     val captchaError: StateFlow<String?> = _captchaError.asStateFlow()
 
-    // Sync state logs
+    // Sync state
     private val _syncLogs = MutableStateFlow<List<String>>(emptyList())
     val syncLogs: StateFlow<List<String>> = _syncLogs.asStateFlow()
 
@@ -92,19 +121,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
     val isChatBotGenerating: StateFlow<Boolean> = _isChatBotGenerating.asStateFlow()
 
     init {
-        // Generate initial CAPTCHA
         generateNewCaptcha()
 
-        // Check if there's a cached profile from previous sessions (fast load!)
         viewModelScope.launch {
             val lastRollNo = repository.getLastLoggedInRollNo()
             if (lastRollNo != null) {
                 _currentRollNo.value = lastRollNo
-                
-                // Detect and migrate older semester subjects in cache automatically
+
                 try {
                     val subjects = repository.getSubjectAttendance(lastRollNo).first()
-                    val hasOldSubjects = subjects.any { 
+                    val hasOldSubjects = subjects.any {
                         it.subjectCode in listOf("MEMEC303", "MEMEC302", "MEMEC301", "AMEC301", "HMC01") ||
                         it.subjectCode in listOf("COEC201", "COEC310", "COEC302", "AIDS01", "COEC102", "COEC211") ||
                         it.subjectCode in listOf("ECEC202", "COEC311", "COEC205", "ECEC301", "ECEC320")
@@ -112,21 +138,23 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     if (hasOldSubjects || subjects.isEmpty()) {
                         repository.performPortalSync(lastRollNo, "saved_password_placeholder") { _, _ -> }
                     }
-                } catch (e: Exception) {
-                    // Fallback gracefully
-                }
+                } catch (_: Exception) { }
 
+                loadSemesters(lastRollNo)
                 _screenState.value = ScreenState.MainDashboard(lastRollNo)
-                // Welcome message
                 appendBotWelcomeMessage(lastRollNo)
             }
         }
     }
 
-    // CAPTCHA Generation using standard canvas drawing
+    private suspend fun loadSemesters(rollNo: String) {
+        val sems = repository.getDistinctSemesters(rollNo)
+        _availableSemesters.value = sems
+    }
+
     fun generateNewCaptcha() {
         val rand = Random()
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // clear readable chars
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         val text = StringBuilder()
         for (i in 0 until 5) {
             text.append(chars[rand.nextInt(chars.length)])
@@ -140,24 +168,21 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // Draw background
         val bgPaint = Paint().apply {
-            color = AndroidColor.rgb(15, 23, 42) // Slate 900
+            color = AndroidColor.rgb(15, 23, 42)
             style = Paint.Style.FILL
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        // Draw bounding glassmorphic border
         val borderPaint = Paint().apply {
-            color = AndroidColor.rgb(51, 65, 85) // Slate 700
+            color = AndroidColor.rgb(51, 65, 85)
             style = Paint.Style.STROKE
             strokeWidth = 2f
         }
         canvas.drawRect(1f, 1f, (width - 1).toFloat(), (height - 1).toFloat(), borderPaint)
 
-        // Noise lines
         val linePaint = Paint().apply {
-            color = AndroidColor.rgb(59, 130, 246) // Accent Electric Blue
+            color = AndroidColor.rgb(59, 130, 246)
             strokeWidth = 2f
             style = Paint.Style.STROKE
         }
@@ -169,18 +194,16 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             )
         }
 
-        // Noise dots
         val dotPaint = Paint().apply {
-            color = AndroidColor.rgb(148, 163, 184) // Slate 400
+            color = AndroidColor.rgb(148, 163, 184)
             strokeWidth = 3f
         }
         for (i in 0 until 40) {
             canvas.drawPoint(rand.nextFloat() * width, rand.nextFloat() * height, dotPaint)
         }
 
-        // Draw Letters
         val textPaint = Paint().apply {
-            color = AndroidColor.rgb(241, 245, 249) // White grey
+            color = AndroidColor.rgb(241, 245, 249)
             textSize = 34f
             isFakeBoldText = true
             isAntiAlias = true
@@ -200,14 +223,12 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         _captchaBitmap.value = bitmap
     }
 
-    // Convert Bitmap to Base64 String for Gemini API consumption
     private suspend fun Bitmap.toBase64Png(): String = withContext(Dispatchers.IO) {
         val outputStream = ByteArrayOutputStream()
         compress(Bitmap.CompressFormat.PNG, 100, outputStream)
         Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
     }
 
-    // Automatically solve CAPTCHA using Gemini Vision
     fun solveCaptchaWithOcr() {
         val bitmap = _captchaBitmap.value ?: return
         viewModelScope.launch {
@@ -221,7 +242,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 } else if (result == "UNKNOWN" || result.isEmpty()) {
                     _captchaError.value = "OCR could not read CAPTCHA. Please enter manually."
                 } else {
-                    // Pre-fill or directly return solved CAPTCHA text
                     _captchaText.value = result
                 }
             } catch (e: Exception) {
@@ -232,7 +252,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // Attempt login with roll number and password
     fun attemptLogin(rollNo: String, password: String, captchaInput: String) {
         if (rollNo.length < 5) {
             _captchaError.value = "Invalid Roll Number. Must be at least 5 character dimensions."
@@ -246,8 +265,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             _captchaError.value = "Incorrect CAPTCHA solver characters. Feel free to refresh."
             return
         }
-
-        // Logic succeeds! Transition to Sync screen
+        resetFilters()
         _screenState.value = ScreenState.Sync(rollNo, password)
         executePortalSync(rollNo, password)
     }
@@ -261,12 +279,11 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 _currentRollNo.value = rollNo
                 val profile = repository.performPortalSync(rollNo, password) { step, log ->
-                    // Update steps
                     _syncLogs.value = _syncLogs.value + log
                     _syncProgress.value = step.toFloat() / 13f
                 }
 
-                // Successful sync! Welcome student
+                loadSemesters(rollNo)
                 appendBotWelcomeMessage(rollNo)
                 _screenState.value = ScreenState.MainDashboard(rollNo)
             } catch (e: Exception) {
@@ -281,9 +298,11 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         val profile = repository.getStudentProfileOneShot(rollNo)
         val name = profile?.name ?: "Student"
         val sem = profile?.semester ?: "4"
+        val sems = repository.getDistinctSemesters(rollNo)
+        val semList = sems.joinToString(", ")
         val welcomeText = "👋 **Welcome back, $name!**\n\n" +
-                "I am your **NSUT Attendance & Analytics Chatbot**. I have successfully synchronized and loaded your **Current Semester (Semester $sem) attendance** grid from the official IMS portal into my local Room cache (older semesters have been ignored to keep your dashboard clean!).\n\n" +
-                "You can use these quick action triggers below or ask any free-form questions about your schedules, bunk options, or shortages:\n\n" +
+                "I am your **NSUT Attendance & Analytics Chatbot**. I have successfully synchronized and loaded your attendance across **${sems.size} semesters** ($semList) from the official IMS portal into my local Room cache.\n\n" +
+                "You can use these quick action triggers or ask any free-form questions:\n\n" +
                 "- `HI`: Displays overall attendance totals and subject breakdown.\n" +
                 "- `SAFE`: Shows classes you can skip.\n" +
                 "- `RISK`: Lists subjects needing attendance recovery.\n" +
@@ -298,12 +317,11 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         val trimmed = inputText.trim()
         if (trimmed.isEmpty()) return
 
-        // Create user message
         val userMsg = ChatMessage(sender = Sender.USER, text = trimmed)
         _chatMessages.value = _chatMessages.value + userMsg
 
         val profile = studentProfile.value
-        val subjects = subjectAttendanceList.value
+        val subjects = filteredSubjects.value
 
         if (profile == null || subjects.isEmpty()) {
             _chatMessages.value = _chatMessages.value + ChatMessage(
@@ -316,7 +334,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         _isChatBotGenerating.value = true
 
         viewModelScope.launch {
-            // 1. Try resolving keywords with exact local equations for offline/speed instant answers!
             val localResponse = getLocalResponse(trimmed, profile, subjects)
             if (localResponse.isNotEmpty()) {
                 _chatMessages.value = _chatMessages.value + ChatMessage(sender = Sender.BOT, text = localResponse)
@@ -324,7 +341,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 return@launch
             }
 
-            // 2. If it is a conversational message, utilize the Gemini API!
             try {
                 val systemInstruction = "You are the NSUT Student Attendance & Analysis Chatbot.\n" +
                     "Here is the student's real-time academic attendance data:\n" +
@@ -335,16 +351,14 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     "Semester: ${profile.semester}\n\n" +
                     "Subjects List:\n" +
                     subjects.joinToString("\n") {
-                        "- ${it.subjectName} (${it.subjectCode}): Attended=${it.attended}/${it.total}, Percentage=${String.format(Locale.US, "%.1f", it.percentage)}%, Bunk Buffer (75%)=${it.skippable75}, Needed (75%)=${it.needed75}, Bunk Buffer (65%)=${it.skippable65}, Needed (65%)=${it.needed65}, Absent Dates=${it.absentDates.joinToString(", ")}"
+                        "- ${it.subjectName} (${it.subjectCode}) [Sem ${it.semester}]: Attended=${it.attended}/${it.total}, Percentage=${String.format(Locale.US, "%.1f", it.percentage)}%, Bunk Buffer (75%)=${it.skippable75}, Needed (75%)=${it.needed75}, Bunk Buffer (65%)=${it.skippable65}, Needed (65%)=${it.needed65}, Absent Dates=${it.absentDates.joinToString(", ")}"
                     } + "\n\n" +
                     "Instructions for you:\n" +
                     "1. Respond directly to the user query inside conversational mode.\n" +
-                    "2. If they ask custom questions (like 'Which is my worst class?' or 'Can I miss Manufacturing next week?'), explain the specific math buffers based on their actual numbers above.\n" +
+                    "2. If they ask custom questions, explain the specific math buffers based on their actual numbers above.\n" +
                     "3. Limit responses to 2 concise markdown paragraphs maximum unless they request deep calculations.\n" +
-                    "4. Use professional student-encouraging support tones. Use beautiful Markdown styling (lists, bold highlights, status code tags)."
+                    "4. Use professional student-encouraging support tones. Use beautiful Markdown styling."
 
-                // Convert history to Gemini request parts
-                // Keep only the last 6 turns to remain safe with context boundary limits
                 val textHistory = _chatMessages.value.takeLast(6).map {
                     Content(parts = listOf(Part(text = it.text)))
                 }
@@ -362,7 +376,6 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // Local state calculation responses
     private fun getLocalResponse(message: String, profile: StudentProfile, subjects: List<SubjectAttendance>): String {
         val clean = message.uppercase().trim()
         return when {
@@ -379,7 +392,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                         "**Subject breakdown:**\n" +
                         subjects.joinToString("\n") { sub ->
                             val status = if (sub.percentage >= 75.0) "🟢 SAFE" else "🔴 SHORT"
-                            "- **${sub.subjectCode} - ${sub.subjectName}**: **${String.format(Locale.US, "%.1f", sub.percentage)}%** • $status"
+                            "- **${sub.subjectCode} - ${sub.subjectName}** (Sem ${sub.semester}): **${String.format(Locale.US, "%.1f", sub.percentage)}%** • $status"
                         }
             }
 
@@ -390,21 +403,20 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     "🟢 **Safe Skip Buffer (maintain >= 75% attendance):**\n\n" +
                             safeSubjects.joinToString("\n") { sub ->
-                                "- **${sub.subjectName} (${sub.subjectCode})**: You can safely miss **${sub.skippable75}** classes. Current: **${String.format(Locale.US, "%.1f", sub.percentage)}%**."
-                            } + "\n\n*Plan your bunks carefully to allocate time for self-study and exam preps!*"
+                                "- **${sub.subjectName} (${sub.subjectCode})** [Sem ${sub.semester}]: You can safely miss **${sub.skippable75}** classes. Current: **${String.format(Locale.US, "%.1f", sub.percentage)}%**."
+                            } + "\n\n*Plan your bunks carefully!*"
                 }
             }
 
             clean == "RISK" || clean == "DANGER" || clean == "ABSENT" -> {
                 val shortSubjects = subjects.filter { it.percentage < 75.0 }
                 if (shortSubjects.isEmpty()) {
-                    "🎉 **Amazing!** You have no subjects at risk of attendance shortfalls. All your subjects are safely above 75%."
+                    "🎉 **Amazing!** You have no subjects at risk. All subjects are safely above 75%."
                 } else {
                     "🔴 **Attendance Shortage Alert (Action Required):**\n\n" +
-                            "You must attend consecutive lectures to recover above 75%:\n\n" +
                             shortSubjects.joinToString("\n") { sub ->
-                                "- **${sub.subjectName} (${sub.subjectCode})**: Current **${String.format(Locale.US, "%.1f", sub.percentage)}%** • Attend **${sub.needed75}** consecutive classes to recover."
-                            } + "\n\n*Make sure to prioritize these classes to avoid semester eligibility issues!*"
+                                "- **${sub.subjectName} (${sub.subjectCode})** [Sem ${sub.semester}]: Current **${String.format(Locale.US, "%.1f", sub.percentage)}%** • Attend **${sub.needed75}** consecutive classes to recover."
+                            } + "\n\n*Make sure to prioritize these classes!*"
                 }
             }
 
@@ -414,7 +426,7 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                     val sub = subjects[numPart - 1]
                     val statusBadge = if (sub.percentage >= 75.0) "🟢 SAFE" else "🔴 SHORT"
                     "📘 **Subject Detail Summary:**\n\n" +
-                            "**${sub.subjectName}** (`${sub.subjectCode}`)\n" +
+                            "**${sub.subjectName}** (`${sub.subjectCode}`) • Sem ${sub.semester}\n" +
                             "- **Status:** $statusBadge\n" +
                             "- **Attended:** ${sub.attended} out of ${sub.total} classes held\n" +
                             "- **Percentage:** **${String.format(Locale.US, "%.1f", sub.percentage)}%**\n" +
@@ -424,9 +436,9 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
                             "- **Date-wise Absences:** ${if (sub.absentDates.isEmpty()) "None recorded" else sub.absentDates.joinToString(", ")}"
                 } else {
                     "📘 **Subject-Wise (SW) Attendance Index:**\n\n" +
-                            "Enter `SW <number>` (e.g., `SW 1`) to see detailed absences and skip limits:\n\n" +
+                            "Enter `SW <number>` (e.g., `SW 1`) to see detailed absences:\n\n" +
                             subjects.mapIndexed { idx, sub ->
-                                "${idx + 1}. **${sub.subjectCode}** - ${sub.subjectName} (${String.format(Locale.US, "%.1f", sub.percentage)}%)"
+                                "${idx + 1}. **${sub.subjectCode}** - ${sub.subjectName} (Sem ${sub.semester}) - ${String.format(Locale.US, "%.1f", sub.percentage)}%"
                             }.joinToString("\n")
                 }
             }
@@ -464,19 +476,15 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    // Force re-scrape/sync data from the dashboard
     fun forceSyncRefresh() {
         val roll = _currentRollNo.value
         val profile = studentProfile.value ?: return
-
-        // Fetch saved password or default to something stable
         val password = "saved_password_placeholder"
-
+        resetFilters()
         _screenState.value = ScreenState.Sync(roll, password)
         executePortalSync(roll, password)
     }
 
-    // Delete student, session cache and log out
     fun triggerLogOut() {
         val roll = _currentRollNo.value
         viewModelScope.launch {
@@ -486,6 +494,8 @@ class AttendanceViewModel(application: Application) : AndroidViewModel(applicati
             _currentRollNo.value = ""
             _chatMessages.value = emptyList()
             _screenState.value = ScreenState.Login
+            _availableSemesters.value = emptyList()
+            resetFilters()
             generateNewCaptcha()
         }
     }

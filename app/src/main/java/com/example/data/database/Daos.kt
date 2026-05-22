@@ -21,6 +21,9 @@ interface StudentDao {
     @Query("SELECT * FROM subject_attendance WHERE rollNo = :rollNo")
     fun getSubjectAttendance(rollNo: String): Flow<List<SubjectAttendanceEntity>>
 
+    @Query("SELECT DISTINCT semester FROM subject_attendance WHERE rollNo = :rollNo ORDER BY semester ASC")
+    suspend fun getDistinctSemesters(rollNo: String): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubjectAttendance(attendance: List<SubjectAttendanceEntity>)
 

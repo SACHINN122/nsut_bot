@@ -8,13 +8,15 @@ data class StudentProfile(
     val rollNo: String,
     val department: String,
     val degree: String,
-    val semester: String
+    val semester: String,
+    val photoUrl: String = ""
 )
 
 @JsonClass(generateAdapter = true)
 data class SubjectAttendance(
     val subjectName: String,
     val subjectCode: String,
+    val semester: String,
     val attended: Int,
     val total: Int,
     val absent: Int,
@@ -50,4 +52,14 @@ data class SyncStepInfo(
     val id: Int,
     val label: String,
     val durationMs: Long
+)
+
+enum class AttendanceFilterStatus {
+    ALL, SAFE, BORDERLINE, SHORTAGE
+}
+
+data class DashboardFilters(
+    val semester: String = "All",
+    val status: AttendanceFilterStatus = AttendanceFilterStatus.ALL,
+    val searchQuery: String = ""
 )

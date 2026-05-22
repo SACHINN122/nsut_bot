@@ -39,7 +39,10 @@ fun MainAppContent(viewModel: AttendanceViewModel) {
 
     val studentProfile by viewModel.studentProfile.collectAsStateWithLifecycle()
     val subjectAttendanceList by viewModel.subjectAttendanceList.collectAsStateWithLifecycle()
+    val filteredSubjects by viewModel.filteredSubjects.collectAsStateWithLifecycle()
     val attendanceInsights by viewModel.attendanceInsights.collectAsStateWithLifecycle()
+    val filters by viewModel.filters.collectAsStateWithLifecycle()
+    val availableSemesters by viewModel.availableSemesters.collectAsStateWithLifecycle()
 
     val captchaBitmap by viewModel.captchaBitmap.collectAsStateWithLifecycle()
     val isCaptchaOcrRunning by viewModel.isCaptchaOcrRunning.collectAsStateWithLifecycle()
@@ -81,12 +84,19 @@ fun MainAppContent(viewModel: AttendanceViewModel) {
                     ChatDashboardScreen(
                         profile = studentProfile,
                         subjects = subjectAttendanceList,
+                        filteredSubjects = filteredSubjects,
                         insights = attendanceInsights,
+                        filters = filters,
+                        availableSemesters = availableSemesters,
                         messages = chatMessages,
                         isBotGenerating = isChatBotGenerating,
                         onSendMessage = { msg -> viewModel.handleUserSendMessage(msg) },
                         onRefreshData = { viewModel.forceSyncRefresh() },
-                        onLogOut = { viewModel.triggerLogOut() }
+                        onLogOut = { viewModel.triggerLogOut() },
+                        onFilterSemester = { viewModel.updateFilterSemester(it) },
+                        onFilterStatus = { viewModel.updateFilterStatus(it) },
+                        onFilterSearch = { viewModel.updateFilterSearch(it) },
+                        onResetFilters = { viewModel.resetFilters() }
                     )
                 }
             }

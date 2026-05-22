@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,8 +19,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -29,8 +32,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.data.model.AttendanceFilterStatus
 import com.example.data.model.AttendanceInsights
 import com.example.data.model.ChatMessage
+import com.example.data.model.DashboardFilters
 import com.example.data.model.Sender
 import com.example.data.model.StudentProfile
 import com.example.data.model.SubjectAttendance
@@ -40,19 +46,21 @@ import java.util.Locale
 fun ChatDashboardScreen(
     profile: StudentProfile?,
     subjects: List<SubjectAttendance>,
+    filteredSubjects: List<SubjectAttendance>,
     insights: AttendanceInsights,
+    filters: DashboardFilters,
+    availableSemesters: List<String>,
     messages: List<ChatMessage>,
     isBotGenerating: Boolean,
     onSendMessage: (String) -> Unit,
     onRefreshData: () -> Unit,
-    onLogOut: () -> Unit
+    onLogOut: () -> Unit,
+    onFilterSemester: (String) -> Unit,
+    onFilterStatus: (AttendanceFilterStatus) -> Unit,
+    onFilterSearch: (String) -> Unit,
+    onResetFilters: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Dashboard, 1 = Chatbot
-    val initials = if (profile != null && profile.name.isNotEmpty()) {
-        profile.name.split(" ").mapNotNull { it.firstOrNull() }.joinToString("").take(2).uppercase()
-    } else {
-        "SP"
-    }
+    var selectedTab by remember { mutableStateOf(0) }
 
     Box(
         modifier = Modifier
@@ -60,8 +68,8 @@ fun ChatDashboardScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A), // Slate 900
-                        Color(0xFF1E1B4B)  // Indigo 950
+                        Color(0xFF0F172A),
+                        Color(0xFF1E1B4B)
                     )
                 )
             )
@@ -78,25 +86,39 @@ fun ChatDashboardScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Initial Circle Avatar
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(Color(0xFF3B82F6), CircleShape)
-                        .border(1.dp, Color(0x33FFFFFF), CircleShape)
-                ) {
-                    Text(
-                        text = initials,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                // Profile Photo
+                if (profile?.photoUrl != null && profile.photoUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = profile.photoUrl,
+                        contentDescription = "Profile Photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .border(1.dp, Color(0x33FFFFFF), CircleShape)
                     )
+                } else {
+                    val initials = if (profile != null && profile.name.isNotEmpty()) {
+                        profile.name.split(" ").mapNotNull { it.firstOrNull() }.joinToString("").take(2).uppercase()
+                    } else "SP"
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(Color(0xFF3B82F6), CircleShape)
+                            .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                    ) {
+                        Text(
+                            text = initials,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // Student Academic Overview
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = profile?.name ?: "Sachin Prajapati",
@@ -107,13 +129,12 @@ fun ChatDashboardScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Roll No: ${profile?.rollNo ?: "2024UME4116"} • Current Semester: Sem ${profile?.semester ?: "4"}",
+                        text = "Roll: ${profile?.rollNo ?: "2024UME4116"} • Sem ${profile?.semester ?: "4"}",
                         fontSize = 11.sp,
                         color = Color(0xFF94A3B8)
                     )
                 }
 
-                // Header Action Buttons
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onRefreshData,
@@ -130,10 +151,9 @@ fun ChatDashboardScreen(
                 }
             }
 
-            // Divider line
             HorizontalDivider(color = Color(0x11FFFFFF), thickness = 1.dp)
 
-            // DUAL-TAB CONTAINER SELECTOR
+            // TAB SELECTOR
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -158,17 +178,27 @@ fun ChatDashboardScreen(
                 )
             }
 
-            // CONTENT BODY based on selected tab
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             ) {
                 if (selectedTab == 0) {
-                    DashboardTabContent(subjects, insights, onChatShortcut = { shortcut ->
-                        onSendMessage(shortcut)
-                        selectedTab = 1 // Switch to chatbot
-                    })
+                    DashboardTabContent(
+                        subjects = filteredSubjects,
+                        totalSubjects = subjects.size,
+                        insights = insights,
+                        filters = filters,
+                        availableSemesters = availableSemesters,
+                        onFilterSemester = onFilterSemester,
+                        onFilterStatus = onFilterStatus,
+                        onFilterSearch = onFilterSearch,
+                        onResetFilters = onResetFilters,
+                        onChatShortcut = { shortcut ->
+                            onSendMessage(shortcut)
+                            selectedTab = 1
+                        }
+                    )
                 } else {
                     ChatbotTabContent(
                         messages = messages,
@@ -219,7 +249,14 @@ fun TabButton(
 @Composable
 fun DashboardTabContent(
     subjects: List<SubjectAttendance>,
+    totalSubjects: Int,
     insights: AttendanceInsights,
+    filters: DashboardFilters,
+    availableSemesters: List<String>,
+    onFilterSemester: (String) -> Unit,
+    onFilterStatus: (AttendanceFilterStatus) -> Unit,
+    onFilterSearch: (String) -> Unit,
+    onResetFilters: () -> Unit,
     onChatShortcut: (String) -> Unit
 ) {
     LazyColumn(
@@ -228,7 +265,7 @@ fun DashboardTabContent(
             .testTag("dashboard_scroll_area"),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        // OVERALL NUMERIC KEY METRIC CARD
+        // OVERALL METRIC CARD
         item {
             Box(
                 modifier = Modifier
@@ -245,7 +282,7 @@ fun DashboardTabContent(
                 ) {
                     Column(modifier = Modifier.weight(1.3f)) {
                         Text(
-                            text = "OVERALL ATTENDANCE (CURRENT SEMESTER ${insights.overallPercentage.let { "IV" } /* or semester dynamically if we want but 'IV' or 'Sem 4' is super neat */})",
+                            text = "OVERALL ATTENDANCE",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF94A3B8),
@@ -264,9 +301,13 @@ fun DashboardTabContent(
                             fontSize = 11.sp,
                             color = Color(0xFF64748B)
                         )
+                        Text(
+                            text = "Showing ${subjects.size} of $totalSubjects subjects",
+                            fontSize = 10.sp,
+                            color = if (subjects.size < totalSubjects) Color(0xFFF59E0B) else Color(0xFF6EE7B7)
+                        )
                     }
 
-                    // Progress circular ring
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.size(72.dp)
@@ -288,7 +329,19 @@ fun DashboardTabContent(
             }
         }
 
-        // THREE SUMMARY STATS BUBBLE CHIPS
+        // FILTER BAR
+        item {
+            FilterBar(
+                filters = filters,
+                availableSemesters = availableSemesters,
+                onFilterSemester = onFilterSemester,
+                onFilterStatus = onFilterStatus,
+                onFilterSearch = onFilterSearch,
+                onResetFilters = onResetFilters
+            )
+        }
+
+        // STATS BUBBLES
         item {
             Row(
                 modifier = Modifier
@@ -317,11 +370,11 @@ fun DashboardTabContent(
             }
         }
 
-        // QUICK ANALYSIS COMMAND CHUT-OFFS
+        // QUICK SHORTCUTS
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(
-                    text = "QUICK CRITICAL BULLET ANALYTICS",
+                    text = "QUICK ACTIONS",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF64748B),
@@ -332,23 +385,17 @@ fun DashboardTabContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 2.dp)
                 ) {
-                    item {
-                        ShortcutChip(label = "Check Bunk Limits", icon = Icons.Default.List, onClick = { onChatShortcut("SAFE") })
-                    }
-                    item {
-                        ShortcutChip(label = "Show Shorts/Danger", icon = Icons.Default.Warning, onClick = { onChatShortcut("RISK") })
-                    }
-                    item {
-                        ShortcutChip(label = "Check Leaves & Holidays", icon = Icons.Default.Info, onClick = { onChatShortcut("CALENDAR") })
-                    }
+                    item { ShortcutChip(label = "Check Bunk Limits", icon = Icons.Default.List, onClick = { onChatShortcut("SAFE") }) }
+                    item { ShortcutChip(label = "Show Shorts/Danger", icon = Icons.Default.Warning, onClick = { onChatShortcut("RISK") }) }
+                    item { ShortcutChip(label = "Check Holidays", icon = Icons.Default.Info, onClick = { onChatShortcut("CALENDAR") }) }
                 }
             }
         }
 
-        // INDIVIDUAL SUBJECT CARDS SECTION
+        // SUBJECTS HEADER
         item {
             Text(
-                text = "SUBJECTS (ACTIVE CURRENT SEMESTER)",
+                text = "SUBJECTS",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF64748B),
@@ -357,9 +404,186 @@ fun DashboardTabContent(
             )
         }
 
+        // SUBJECT CARDS
         items(subjects.size) { index ->
             val sub = subjects[index]
             SubjectAttCard(sub, index + 1, onDetailClick = { onChatShortcut("SW ${index + 1}") })
+        }
+
+        if (subjects.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No subjects match the current filters.\nTry changing or resetting filters.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterBar(
+    filters: DashboardFilters,
+    availableSemesters: List<String>,
+    onFilterSemester: (String) -> Unit,
+    onFilterStatus: (AttendanceFilterStatus) -> Unit,
+    onFilterSearch: (String) -> Unit,
+    onResetFilters: () -> Unit
+) {
+    var searchText by remember { mutableStateOf(filters.searchQuery) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .background(Color(0x1A1E293B), RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0x0DFFFFFF), RoundedCornerShape(16.dp))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "FILTERS",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF64748B),
+                letterSpacing = 1.sp
+            )
+            TextButton(
+                onClick = {
+                    onResetFilters()
+                    searchText = ""
+                },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text("Reset", fontSize = 11.sp, color = Color(0xFF60A5FA))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Search field
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = {
+                searchText = it
+                onFilterSearch(it)
+            },
+            placeholder = { Text("Search subject name or code...", color = Color(0xFF475569), fontSize = 12.sp) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedBorderColor = Color(0xFF3B82F6),
+                unfocusedBorderColor = Color(0x1EFFFFFF),
+                cursorColor = Color(0xFF3B82F6)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true,
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFF64748B), modifier = Modifier.size(18.dp))
+            },
+            trailingIcon = {
+                if (searchText.isNotEmpty()) {
+                    IconButton(onClick = {
+                        searchText = ""
+                        onFilterSearch("")
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Semester chips
+        val semOptions = listOf("All") + availableSemesters
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(semOptions.size) { idx ->
+                val sem = semOptions[idx]
+                val isSelected = filters.semester == sem
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onFilterSemester(sem) },
+                    label = {
+                        Text(
+                            text = if (sem == "All") "All Semesters" else "Sem $sem",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF3B82F6),
+                        selectedLabelColor = Color.White,
+                        containerColor = Color(0x1A1E293B),
+                        labelColor = Color(0xFF94A3B8)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = Color(0x0DFFFFFF),
+                        selectedBorderColor = Color(0xFF3B82F6),
+                        enabled = true,
+                        selected = isSelected
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Status chips
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val statusOptions = listOf(
+                "All" to AttendanceFilterStatus.ALL,
+                "Safe" to AttendanceFilterStatus.SAFE,
+                "Borderline" to AttendanceFilterStatus.BORDERLINE,
+                "Shortage" to AttendanceFilterStatus.SHORTAGE
+            )
+            items(statusOptions.size) { idx ->
+                val (label, status) = statusOptions[idx]
+                val isSelected = filters.status == status
+                val chipColor = when (status) {
+                    AttendanceFilterStatus.SAFE -> Color(0xFF10B981)
+                    AttendanceFilterStatus.BORDERLINE -> Color(0xFFF59E0B)
+                    AttendanceFilterStatus.SHORTAGE -> Color(0xFFEF4444)
+                    else -> Color(0xFF3B82F6)
+                }
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onFilterStatus(status) },
+                    label = {
+                        Text(
+                            text = label,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = chipColor,
+                        selectedLabelColor = Color.White,
+                        containerColor = Color(0x1A1E293B),
+                        labelColor = Color(0xFF94A3B8)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = Color(0x0DFFFFFF),
+                        selectedBorderColor = chipColor,
+                        enabled = true,
+                        selected = isSelected
+                    )
+                )
+            }
         }
     }
 }
@@ -403,9 +627,9 @@ fun ShortcutChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageV
 @Composable
 fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit) {
     val statusColor = when {
-        sub.percentage >= 75.0 -> Color(0xFF10B981) // Emerald Green (Safe)
-        sub.percentage >= 65.0 -> Color(0xFFF59E0B) // Amber yellow (Borderline)
-        else -> Color(0xFFEF4444) // Light red (Danger)
+        sub.percentage >= 75.0 -> Color(0xFF10B981)
+        sub.percentage >= 65.0 -> Color(0xFFF59E0B)
+        else -> Color(0xFFEF4444)
     }
 
     val statusBadgeText = when {
@@ -424,20 +648,35 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
             .padding(16.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Subject header title row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1.3f)) {
-                    Text(
-                        text = "${sub.subjectCode} • Subject #$index",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF3B82F6),
-                        letterSpacing = 1.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${sub.subjectCode} • Subject #$index",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF3B82F6),
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF1E293B), RoundedCornerShape(4.dp))
+                                .border(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "Sem ${sub.semester}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF60A5FA)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = sub.subjectName,
@@ -449,7 +688,6 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
                     )
                 }
 
-                // Compact glassmorphic status badge
                 Box(
                     modifier = Modifier
                         .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
@@ -467,7 +705,6 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Lectures totals summary row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -483,7 +720,6 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
                     )
                 }
 
-                // Percentage
                 Text(
                     text = "${String.format(Locale.US, "%.1f", sub.percentage)}%",
                     fontSize = 20.sp,
@@ -494,7 +730,6 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Progress bar
             LinearProgressIndicator(
                 progress = { (sub.percentage / 100.0).toFloat().coerceIn(0f, 1f) },
                 color = statusColor,
@@ -507,7 +742,6 @@ fun SubjectAttCard(sub: SubjectAttendance, index: Int, onDetailClick: () -> Unit
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action limits calculations row
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -566,7 +800,6 @@ fun ChatbotTabContent(
     val listState = rememberLazyListState()
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Send action trigger
     val attemptSubmit = {
         if (textInput.trim().isNotEmpty()) {
             val toSend = textInput
@@ -583,7 +816,6 @@ fun ChatbotTabContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // SCROLLABLE CHAT MESSAGES DISPLAY AREA
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -624,7 +856,6 @@ fun ChatbotTabContent(
             }
         }
 
-        // STICKY BOTTOM QUICK ACTION SHIELD SHORTCUTS ROW
         HorizontalDivider(color = Color(0x0AFFFFFF), thickness = 1.dp)
         Box(
             modifier = Modifier
@@ -665,7 +896,6 @@ fun ChatbotTabContent(
             }
         }
 
-        // INPUT FIELD STICKY FOOTER ACTION
         HorizontalDivider(color = Color(0x0AFFFFFF), thickness = 1.dp)
         Row(
             modifier = Modifier
@@ -743,10 +973,6 @@ fun ChatBubble(msg: ChatMessage) {
     }
 }
 
-/**
- * High quality dynamic Markdown text styler.
- * Renders bold blocks, bullet layouts and mono variables elegantly inline!
- */
 @Composable
 fun MarkdownText(rawText: String, textColor: Color) {
     Column {
@@ -818,9 +1044,6 @@ fun MarkdownText(rawText: String, textColor: Color) {
     }
 }
 
-/**
- * Formats inline asterisks (**bold**) and backticks (`mono`) cleanly into sub-spans.
- */
 @Composable
 fun parseInlineMarkdown(text: String): androidx.compose.ui.text.AnnotatedString {
     return remember(text) {
