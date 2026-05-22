@@ -2,6 +2,8 @@
 
 An Android app for NSUT students to track, analyze, and optimize academic attendance with AI-powered insights, offline caching, and an intelligent chatbot assistant.
 
+> Developed by [@algsoch](https://github.com/algsoch) · Contributed by [@fiscalmindset](https://github.com/fiscalmindset)
+
 ---
 
 ## Features
