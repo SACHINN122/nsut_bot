@@ -1,0 +1,6 @@
+{
+  "name": "NSUT Attendance",
+  "description": "Smart attendance, bunk planner, and AI chatbot analyzer for Netaji Subhas University of Technology.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
