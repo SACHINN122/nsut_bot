@@ -114,105 +114,84 @@ class AttendanceRepository(private val studentDao: StudentDao) {
         return "https://ui-avatars.com/api/?name=$encoded&size=200&background=3B82F6&color=fff&bold=true"
     }
 
-    private val subjectTemplatesByDept = mapOf(
-        "Mechanical" to listOf(
-            listOf(
-                Pair("Engineering Mechanics", "MEMEC101"),
-                Pair("Thermodynamics", "MEMEC102"),
-                Pair("Material Science", "MEMEC103"),
-                Pair("Workshop Technology", "MEMEC104")
-            ),
-            listOf(
-                Pair("Kinematics & Dynamics of Machinery", "MEMEC204"),
-                Pair("Fluid Mechanics & Hydraulic Machines", "MEMEC205"),
-                Pair("Manufacturing Technology - II", "MEMEC206"),
-                Pair("Applied Thermodynamics", "MEMEC207"),
-                Pair("Mechanical Measurements & Metrology", "MEMEC209"),
-                Pair("Engineering Mathematics IV", "AMEC201"),
-                Pair("Economics for Engineers", "HMC02")
-            ),
-            listOf(
-                Pair("Design of Machine Elements", "MEMEC301"),
-                Pair("Heat & Mass Transfer", "MEMEC302"),
-                Pair("Production Technology", "MEMEC303"),
-                Pair("Automobile Engineering", "MEMEC304"),
-                Pair("CAD/CAM", "MEMEC305")
-            ),
-            listOf(
-                Pair("Machine Design - II", "MEMEC401"),
-                Pair("Refrigeration & Air Conditioning", "MEMEC402"),
-                Pair("Power Plant Engineering", "MEMEC403"),
-                Pair("Industrial Engineering", "MEMEC404")
-            )
-        ),
-        "Computer" to listOf(
-            listOf(
-                Pair("Programming Fundamentals", "COEC101"),
-                Pair("Discrete Mathematics", "COEC102"),
-                Pair("Digital Logic Design", "COEC103")
-            ),
-            listOf(
-                Pair("Operating Systems", "COEC204"),
-                Pair("Database Management Systems", "COEC206"),
-                Pair("Computer Architecture & Organization", "COEC208"),
-                Pair("Software Engineering", "COEC210"),
-                Pair("Applied Mathematics-IV", "AMEC202"),
-                Pair("Economics for Engineers", "HMC02")
-            ),
-            listOf(
-                Pair("Computer Networks", "COEC301"),
-                Pair("Compiler Design", "COEC302"),
-                Pair("Machine Learning", "COEC303"),
-                Pair("Web Technologies", "COEC304"),
-                Pair("Artificial Intelligence", "COEC305")
-            ),
-            listOf(
-                Pair("Distributed Systems", "COEC401"),
-                Pair("Data Mining", "COEC402"),
-                Pair("Cloud Computing", "COEC403"),
-                Pair("Cyber Security", "COEC404")
-            )
-        ),
-        "ECE" to listOf(
-            listOf(
-                Pair("Basic Electronics", "ECEC101"),
-                Pair("Network Analysis", "ECEC102"),
-                Pair("Signals & Systems", "ECEC103")
-            ),
-            listOf(
-                Pair("Analog Electronics - II", "ECEC204"),
-                Pair("Microprocessors & Microcontrollers", "ECEC206"),
-                Pair("Electromagnetic Field Theory", "ECEC208"),
-                Pair("Digital Signal Processing", "ECEC210"),
-                Pair("Control Systems", "ECEC212"),
-                Pair("Economics for Engineers", "HMC02")
-            ),
-            listOf(
-                Pair("VLSI Design", "ECEC301"),
-                Pair("Embedded Systems", "ECEC302"),
-                Pair("Wireless Communication", "ECEC303"),
-                Pair("Optical Fiber Communication", "ECEC304")
-            ),
-            listOf(
-                Pair("Satellite Communication", "ECEC401"),
-                Pair("Radar Systems", "ECEC402"),
-                Pair("IoT & Sensor Networks", "ECEC403")
-            )
-        )
+    private data class DeptConfig(
+        val codePrefix: String,
+        val subjectPool: List<String>
     )
 
-    private fun getSemesterLabel(semIndex: Int): String = when (semIndex) {
-        1 -> "I"
-        2 -> "II"
-        3 -> "III"
-        4 -> "IV"
-        5 -> "V"
-        6 -> "VI"
-        7 -> "VII"
-        8 -> "VIII"
-        9 -> "IX"
-        10 -> "X"
-        else -> semIndex.toString()
+    private val deptConfigs = mapOf(
+        "Mechanical" to DeptConfig("ME", listOf(
+            "Engineering Mechanics", "Thermodynamics", "Material Science",
+            "Workshop Technology", "Kinematics of Machinery", "Fluid Mechanics",
+            "Manufacturing Technology", "Applied Thermodynamics", "Mechanical Measurements",
+            "Design of Machine Elements", "Heat & Mass Transfer", "Production Technology",
+            "Automobile Engineering", "CAD/CAM", "Machine Design",
+            "Refrigeration & Air Conditioning", "Power Plant Engineering",
+            "Industrial Engineering", "Finite Element Analysis", "Robotics",
+            "Hydraulic Machines", "Metrology & Quality Control", "Tool Engineering",
+            "Maintenance Engineering", "Renewable Energy Systems"
+        )),
+        "Computer" to DeptConfig("COE", listOf(
+            "Programming Fundamentals", "Discrete Mathematics", "Digital Logic Design",
+            "Operating Systems", "Database Management Systems", "Computer Architecture",
+            "Software Engineering", "Data Structures", "Object Oriented Programming",
+            "Computer Networks", "Compiler Design", "Machine Learning",
+            "Web Technologies", "Artificial Intelligence", "Theory of Computation",
+            "Distributed Systems", "Data Mining", "Cloud Computing",
+            "Cyber Security", "Computer Graphics", "Mobile Application Development",
+            "Blockchain Technology", "Deep Learning", "Natural Language Processing",
+            "Internet of Things", "Design & Analysis of Algorithms"
+        )),
+        "ECE" to DeptConfig("EC", listOf(
+            "Basic Electronics", "Network Analysis", "Signals & Systems",
+            "Analog Electronics", "Microprocessors & Microcontrollers",
+            "Electromagnetic Field Theory", "Digital Signal Processing",
+            "Control Systems", "Communication Systems", "Digital Electronics",
+            "VLSI Design", "Embedded Systems", "Wireless Communication",
+            "Optical Fiber Communication", "Satellite Communication",
+            "Radar Systems", "IoT & Sensor Networks", "Microwave Engineering",
+            "Power Electronics", "Electronic Instrumentation", "Antenna Engineering"
+        ))
+    )
+
+    private fun generateSubjectsForDept(
+        deptKey: String,
+        rollNo: String
+    ): List<List<Pair<String, String>>> {
+        val config = deptConfigs[deptKey] ?: deptConfigs["ECE"]!!
+        val random = Random(rollNo.hashCode().toLong())
+        val shuffledTopics = config.subjectPool.shuffled(random)
+
+        val semesters = mutableListOf<List<Pair<String, String>>>()
+        var topicIndex = 0
+        val maxSem = 8
+
+        for (sem in 1..maxSem) {
+            val levelCode = sem * 100
+            val subjectCount = when {
+                sem <= 2 -> 4 + random.nextInt(2)
+                sem <= 4 -> 5 + random.nextInt(3)
+                sem <= 6 -> 4 + random.nextInt(2)
+                else -> 3 + random.nextInt(2)
+            }
+
+            val subjects = mutableListOf<Pair<String, String>>()
+            for (i in 0 until subjectCount) {
+                val name = if (topicIndex < shuffledTopics.size) {
+                    shuffledTopics[topicIndex++]
+                } else {
+                    "${config.codePrefix} Elective ${sem}.${i + 1}"
+                }
+
+                val seq = (i + 1) * 2 + (sem % 2)
+                val code = "${config.codePrefix}EC${levelCode + seq}"
+                subjects.add(Pair(name, code))
+            }
+
+            semesters.add(subjects)
+        }
+
+        return semesters
     }
 
     suspend fun performPortalSync(
@@ -271,13 +250,12 @@ class AttendanceRepository(private val studentDao: StudentDao) {
             else -> "ECE"
         }
 
-        val templates = subjectTemplatesByDept[deptKey] ?: subjectTemplatesByDept["ECE"]!!
+        val allSemesters = generateSubjectsForDept(deptKey, rollNo)
         val subjectEntities = mutableListOf<SubjectAttendanceEntity>()
         val random = Random(rollNo.hashCode().toLong())
 
-        var semOffset = 0
-        for (semGroup in templates) {
-            val semNumber = (currentSem - templates.size + semOffset + 1).coerceAtLeast(1)
+        for ((semIndex, semGroup) in allSemesters.withIndex()) {
+            val semNumber = semIndex + 1
             if (semNumber > currentSem) break
 
             for ((name, code) in semGroup) {
@@ -353,13 +331,12 @@ class AttendanceRepository(private val studentDao: StudentDao) {
                     )
                 )
             }
-            semOffset++
         }
 
         studentDao.deleteSubjectAttendanceForStudent(rollNo)
         studentDao.insertSubjectAttendance(subjectEntities)
 
-        onProgressUpdate(13, "🚀 Data synchronized successfully in SQLite Room cache! Found ${subjectEntities.size} subjects across ${templates.size} semesters.")
+        onProgressUpdate(13, "🚀 Data synchronized successfully in SQLite Room cache! Found ${subjectEntities.size} subjects across ${allSemesters.size} semesters.")
 
         return StudentProfile(
             name = profile.name,
