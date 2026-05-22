@@ -49,7 +49,7 @@ flowchart TB
         LC -->|"password empty"| ERR2["Show: Password cannot be empty"]
         LC -->|"captcha mismatch"| ERR3["Show: Incorrect CAPTCHA"]
         LC -->|"all valid"| SS[ScreenState.Sync]
-        SS --> SYNCUI[SyncScreen: animated progress]
+        SS --> SYNCUI["SyncScreen with animated progress"]
         SYNCUI -->|"syncComplete"| DASH[ChatDashboardScreen]
         DASH -->|"Tab 0"| DASHVIEW[Dashboard View]
         DASH -->|"Tab 1"| CHATVIEW[Chat View]
@@ -162,7 +162,7 @@ flowchart TB
     style GC fill:#2d6a4f,color:#fff
     style PROFILE_GEN fill:#5a3e2b,color:#fff
     style MOCK_DATA fill:#5a3e2b,color:#fff
-    style G_API fill:#6b21a8,color:#fff
+    style G_API fill:#059669,color:#fff
     style DB_STUDENT fill:#4a4a8a,color:#fff
     style DB_SUBJECT fill:#4a4a8a,color:#fff
 ```
@@ -212,8 +212,8 @@ flowchart LR
     subgraph Recognition [Gemini Vision OCR]
         E --> F[Convert Bitmap<br/>to Base64 PNG]
         F --> G[POST to Gemini API<br/>gemini-3.5-flash<br/>temperature=0.1]
-        G --> H[Prompt: "You are an OCR API.<br/>Extract characters from<br/>this CAPTCHA image."]
-        H --> I[Filter response:<br/>keep only letters/digits,<br/>uppercase]
+        G --> H["Send OCR prompt to Gemini<br/>Extract characters from<br/>this CAPTCHA image"]
+        H --> I["Filter response text<br/>keep only letters/digits,<br/>uppercase"]
     end
 
     subgraph Validation [Local Validation]
@@ -221,12 +221,12 @@ flowchart LR
         J --> K[User clicks<br/>LOGIN  SYNC PORTAL]
         K --> L{Compare input vs.<br/>_captchaText}
         L -->|Match| M[Proceed to<br/>Portal Sync]
-        L -->|Mismatch| N[Show error:<br/>"Incorrect CAPTCHA<br/>solver characters"]
+        L -->|Mismatch| N["Show error text<br/>Incorrect CAPTCHA<br/>solver characters"]
     end
 
     style A fill:#1e3a5f,color:#fff
     style B fill:#1e3a5f,color:#fff
-    style G fill:#6b21a8,color:#fff
+    style G fill:#059669,color:#fff
     style L fill:#b91c1c,color:#fff
     style M fill:#2d6a4f,color:#fff
 ```
@@ -264,7 +264,7 @@ graph TB
 
     style DB fill:#4a4a8a,stroke:#333,stroke-width:2px
     style Gemini fill:#1e3a5f,stroke:#333,stroke-width:2px
-    style GeminiAPI fill:#6b21a8,stroke:#333,stroke-width:2px
+    style GeminiAPI fill:#059669,stroke:#333,stroke-width:2px
 ```
 
 ### Screen navigation (state machine)
