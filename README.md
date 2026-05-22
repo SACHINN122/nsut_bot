@@ -2,8 +2,6 @@
 
 An Android app for NSUT students to track, analyze, and optimize academic attendance with AI-powered insights, offline caching, and an intelligent chatbot assistant.
 
-> Developed by [@algsoch](https://github.com/algsoch) · Contributed by [@fiscalmindset](https://github.com/fiscalmindset)
-
 ---
 
 ## Features
@@ -403,6 +401,45 @@ Attendance data is generated **deterministically** — the roll number hash seed
 
 3. **Build and run**:
    Open in Android Studio and hit **Run**. The Google Secrets plugin injects the key from `.env` into `BuildConfig.GEMINI_API_KEY`.
+
+---
+
+## Contributors
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/SACHINN122">
+        <img src="https://github.com/SACHINN122.png" width="80" height="80" alt="SACHINN122"><br>
+        <strong>@SACHINN122</strong>
+      </a>
+      <br>
+      <sub>Sachin Prajapati · Creator & Lead Developer</sub>
+      <br>
+      <sub>Original architect of the NSUT Attendance Bot</sub>
+    </td>
+    <td align="center">
+      <a href="https://github.com/algsoch">
+        <img src="https://github.com/algsoch.png" width="80" height="80" alt="algsoch"><br>
+        <strong>@algsoch</strong>
+      </a>
+      <br>
+      <sub>Vicky Kumar · Documentation & Diagrams</sub>
+      <br>
+      <sub>README structure, Mermaid architecture flow</sub>
+    </td>
+    <td align="center">
+      <a href="https://github.com/fiscalmindset">
+        <img src="https://github.com/fiscalmindset.png" width="80" height="80" alt="fiscalmindset"><br>
+        <strong>@fiscalmindset</strong>
+      </a>
+      <br>
+      <sub>Contributor</sub>
+      <br>
+      <sub>Project support & collaboration</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
