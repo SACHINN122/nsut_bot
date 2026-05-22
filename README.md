@@ -271,29 +271,43 @@ graph TB
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Login
-    state Login {
-        [*] --> CaptchaGeneration
-        CaptchaGeneration --> GeminiOCR
-        GeminiOCR --> CaptchaPrefilled
-        CaptchaPrefilled --> Validation
-        Validation --> Sync : CAPTCHA matched
-        Validation --> Login : CAPTCHA mismatch
+    [*] --> LoginScreen
+    state LoginScreen {
+        [*] --> CaptchaGen
+        CaptchaGen --> GeminiOCR
+        GeminiOCR --> CaptchaPrefill
+        CaptchaPrefill --> ValidateCaptcha
+        ValidateCaptcha --> SyncScreen : match
+        ValidateCaptcha --> CaptchaGen : mismatch
     }
-    Login --> Sync : login clicked
-    state Sync {
-        [*] --> Step_1_of_13
-        Step_1_of_13 --> Step_2_of_13
-        Step_2_of_13 --> Step_13_of_13
-        Step_13_of_13 --> ProfileGenerated
+    LoginScreen --> SyncScreen : login
+    
+    state SyncScreen {
+        [*] --> Step1
+        Step1 --> Step2
+        Step2 --> Step3
+        Step3 --> Step4
+        Step4 --> Step5
+        Step5 --> Step6
+        Step6 --> Step7
+        Step7 --> Step8
+        Step8 --> Step9
+        Step9 --> Step10
+        Step10 --> Step11
+        Step11 --> Step12
+        Step12 --> Step13
+        Step13 --> ProfileReady
     }
-    Sync --> MainDashboard : sync complete
-    state MainDashboard {
+    
+    SyncScreen --> DashboardScreen : sync complete
+    
+    state DashboardScreen {
         [*] --> DashboardTab
-        DashboardTab --> ChatTab : swipe/tap
-        ChatTab --> DashboardTab : swipe/tap
+        DashboardTab --> ChatTab : swipe
+        ChatTab --> DashboardTab : swipe
     }
-    MainDashboard --> Login : logout
+    
+    DashboardScreen --> LoginScreen : logout
 ```
 
 ---
